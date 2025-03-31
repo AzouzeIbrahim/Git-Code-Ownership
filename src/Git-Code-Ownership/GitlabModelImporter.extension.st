@@ -1,22 +1,6 @@
 Extension { #name : 'GitlabModelImporter' }
 
 { #category : '*Git-Code-Ownership' }
-GitlabModelImporter >> GetBlame: aGLHFile [ 
-	| results  params   jsonObject  result |
-			params := { 
-		    #ref ->   aGLHFile branch name  .
-	       } asDictionary.
-	           results := self repoApi blames getBlameFile: aGLHFile path ofProject: aGLHFile branch repository project id withParams: params      .
-              jsonObject := NeoJSONReader fromString: results .
-              result:= (jsonObject isArray ifTrue: [jsonObject ] ifFalse: [nil]).
-"              result:= result reject: [:item | item isNil]."
-   ^result 
-	
-
-	
-]
-
-{ #category : '*Git-Code-Ownership' }
 GitlabModelImporter >> UserContributionFromBlames: blamesArray [
     | dictionary_Emails_Lines line blames   |
      "filter if  the blame isn't nil  bacause some file like media and photo dosn'thave blame  "
@@ -51,4 +35,32 @@ GitlabModelImporter >> UserContributionFromBlames: blamesArray [
     "Return the final dictionary of email -> total modified lines"
     ^ dictionary_Emails_Lines
 
+]
+
+{ #category : '*Git-Code-Ownership' }
+GitlabModelImporter >> getBlameOf: filePath inBranch: branch ofProject: projectId [
+
+	| results   jsonObject  result |
+		
+	           results := self repoApi repositories getBlameOf: filePath  inRef: branch ofProject: projectId       .
+              jsonObject := NeoJSONReader fromString: results .
+              result:= (jsonObject isArray ifTrue: [jsonObject ] ifFalse: [nil]).
+"              result:= result reject: [:item | item isNil]."
+   ^result 
+	
+
+	
+]
+
+{ #category : '*Git-Code-Ownership' }
+GitlabModelImporter >> getBlameOf: filePath inBranch: ref withRange:gitlabRange ofProject:projectId [
+	| results    jsonObject  result |
+	           results := self repoApi repositories 	getBlameOf: filePath inRef: ref withRange:gitlabRange ofProject:projectId      .
+              jsonObject := NeoJSONReader fromString: results .
+              result:= (jsonObject isArray ifTrue: [jsonObject ] ifFalse: [nil]).
+"              result:= result reject: [:item | item isNil]."
+   ^result 
+	
+
+	
 ]

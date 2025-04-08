@@ -1,6 +1,39 @@
 Extension { #name : 'GitlabModelImporter' }
 
 { #category : '*Git-Code-Ownership' }
+GitlabModelImporter >> UserContributionFromBlameInFile: blame [
+    | emails totalLines result  |
+"       bl := blame reject: [:item | item isNil]."
+    "Extract unique emails from the blame list"
+    emails := (blame collect: [ :element | 
+        (element at: 'commit') at: 'author_email' 
+    ]) asSet.
+
+    "Calculate total number of lines"
+    totalLines := (blame collect: [ :element | 
+        (element at: 'lines') size 
+    ]) sum.
+
+    "Initialize result dictionary"
+    result := Dictionary new.
+    emails do: [ :email | result at: email put: 0. ].
+
+    "Distribute line contributions proportionally"
+    blame do: [ :element | 
+        | authorEmail linesSize |
+        authorEmail := (element at: 'commit') at: 'author_email'.
+        linesSize := (element at: 'lines') size.
+
+        "Ensure authorEmail exists before updating count"
+        (result at: authorEmail ifAbsent: [ 0 ]) 
+            ifNotNil: [ result at: authorEmail put: ((result at: authorEmail) + (linesSize / totalLines) ) ].
+    ].
+
+    ^ result.
+
+]
+
+{ #category : '*Git-Code-Ownership' }
 GitlabModelImporter >> UserContributionFromBlames: blamesArray [
     | dictionary_Emails_Lines line blames   |
      "filter if  the blame isn't nil  bacause some file like media and photo dosn'thave blame  "
@@ -42,9 +75,9 @@ GitlabModelImporter >> getBlameOf: filePath inBranch: branch ofProject: projectI
 
 	| results   jsonObject  result |
 		
-	           results := self repoApi repositories getBlameOf: filePath  inRef: branch ofProject: projectId       .
+	           results := self repoApi repositories getBlameOf: filePath  inRef:    branch ofProject: projectId       .
               jsonObject := NeoJSONReader fromString: results .
-              result:= (jsonObject isArray ifTrue: [jsonObject ] ifFalse: [nil]).
+              result:= (jsonObject isArray ifTrue: [jsonObject ] ifFalse: [#()]).
 "              result:= result reject: [:item | item isNil]."
    ^result 
 	

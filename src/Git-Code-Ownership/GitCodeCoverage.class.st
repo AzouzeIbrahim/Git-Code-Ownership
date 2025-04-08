@@ -17,8 +17,30 @@ GitCodeCoverage >> codeCoveragInBranch: aGLHBranch [
 ]
 
 { #category : 'coverage' }
-GitCodeCoverage >> codeCoveragInFile: aGLHFileDirectory [ 
-	self shouldBeImplemented.
+GitCodeCoverage >> codeCoveragInFile: blame [   
+    | daysList h  |
+
+
+
+    "1. Vérifier que le blame est valide"
+    blame ifNil: [ ^self inform: 'Aucune information de blame fournie.' ].
+
+    (blame isArray and: [ blame isEmpty ])
+        ifTrue: [ ^self inform: 'Pas de commits trouvés dans ce blame.' ].
+
+    "2. Extraire la liste des jours depuis les commits"
+    daysList := blame collect: [ :d |
+        ((Date today - (DateAndTime fromString: ((d at: #commit) at: #committed_date))) asDays)
+    ].
+
+    "3. Créer et configurer la heatmap"
+    h := RSHeatmap new.
+    h objectsX: (1 to: daysList size) asArray.
+    h objectsY: #('Commits').
+    h dataMatrix: (Array with: daysList asArray).
+    h shouldShowCellLabels: false.
+    h open.
+
 ]
 
 { #category : 'coverage' }

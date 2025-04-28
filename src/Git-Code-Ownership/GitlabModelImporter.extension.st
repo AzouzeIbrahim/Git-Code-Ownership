@@ -3,7 +3,7 @@ Extension { #name : 'GitlabModelImporter' }
 { #category : '*Git-Code-Ownership' }
 GitlabModelImporter >> UserContributionFromBlameInFile: blame [
     | emails totalLines result  |
-"       bl := blame reject: [:item | item isNil]."
+       "bl := blame reject: [:item | item isEmpty ]."
     "Extract unique emails from the blame list"
     emails := (blame collect: [ :element | 
         (element at: 'commit') at: 'author_email' 

@@ -3,7 +3,8 @@ Class {
 	#superclass : 'Object',
 	#instVars : [
 		'commit',
-		'lines'
+		'lines',
+		'file'
 	],
 	#category : 'Git-Code-Ownership-Objects',
 	#package : 'Git-Code-Ownership',
@@ -11,6 +12,42 @@ Class {
 }
 
 { #category : 'accessing' }
+GitBlame >> commit [
+
+	^ commit
+]
+
+{ #category : 'accessing' }
+GitBlame >> commit: anObject [
+
+	commit := anObject
+]
+
+{ #category : 'accessing' }
 GitBlame >> creator [
-	^ commit author
+	^ commit ifNotNil: #author
+]
+
+{ #category : 'accessing' }
+GitBlame >> file [
+
+	^ file
+]
+
+{ #category : 'accessing' }
+GitBlame >> file: anObject [
+
+	file := anObject
+]
+
+{ #category : 'accessing' }
+GitBlame >> lines [
+
+	^ lines
+]
+
+{ #category : 'accessing' }
+GitBlame >> lines: anObject [
+
+	lines := anObject
 ]

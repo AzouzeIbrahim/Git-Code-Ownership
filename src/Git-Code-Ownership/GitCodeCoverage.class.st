@@ -10,34 +10,35 @@ Class {
 }
 
 { #category : 'as yet unclassified' }
-GitCodeCoverage >> codeCoveragInBranch: fileBlameDict [ 
-	|tree s  postOrderTraversal |
+GitCodeCoverage >> codeCoveragInBranch:  fileBlameDict [ 
+	|tree s  postOrderTraversal    |
 "Création de l'arbre"
 tree := HNode named: 'projet'.
 
-"Création de l'échelle de couleur en fonction de l'ancienneté"
+"Création de l'échelle de couleur"
 s := NSScale linear.
 s domain: { -30 . 0 }.
 s range: { Color blue . Color red }.
 
 "Construction de l'arbre avec les fichiers"
 fileBlameDict associationsDo: [ :assoc |
-    | path blames    segments currentNode nextNode lastSegment nodeName isFile fileNode  color   colors |
+    | path segments currentNode nextNode lastSegment isFile fileNode nodeName blames colors color |
 
     path := assoc key.
     blames := assoc value.
     segments := path asFileReference pathSegments.
 
-    "Calculer les couleurs pour le fichier"
+    lastSegment := segments last.
+    isFile := lastSegment includes: $. .  " pour éviter la création des fichier fantome pour des dossier "
+
+    "Calcul des couleurs pour les fichiers"
     colors := blames collect: [ :d |
         (s scale: ((Date today - (DateAndTime fromString: ((d at: #commit) at: #committed_date))) asDays)) translucent
     ].
 
     currentNode := tree.
-    lastSegment := segments last.
-    isFile := segments size = 1 or: [ segments last ~= '' ].
 
-    "Naviguer dans la hiérarchie (dossiers)"
+    "Créer les dossiers intermédiaires"
     segments allButLast do: [ :segment |
         nodeName := segment , '/'.
         nextNode := (currentNode children detect: [ :child | child name = nodeName ] ifNone: [
@@ -50,20 +51,18 @@ fileBlameDict associationsDo: [ :assoc |
         currentNode := nextNode.
     ].
 
-    "Créerles nodes de  fichier ou sous-dossier"
-    nodeName := isFile ifTrue: [ lastSegment ] ifFalse: [ lastSegment , '/' ].
-    fileNode := HNode named: nodeName.
-
-    "Colorier si c'est un fichier"
+    "Ajouter un fichier seulement si c’est un vrai fichier"
     isFile ifTrue: [
+        fileNode := HNode named: lastSegment.
         color := (colors ifNotEmpty: [ colors sum translucent ] ifEmpty: [ Color gray translucent ]).
         fileNode color: color.
+        currentNode add: fileNode.
     ].
 
-    currentNode add: fileNode.
+    currentNode collapse.
 ].
 
-"Définir une méthode récursive pour parcourir en post-ordre"
+"Parcours post-ordre pour colorier les dossiers"
 postOrderTraversal := [ :node :block |
     node children do: [ :child |
         postOrderTraversal value: child value: block
@@ -71,25 +70,21 @@ postOrderTraversal := [ :node :block |
     block value: node.
 ].
 
-"Appliquer la couleur aux dossiers"
+"Coloration des dossiers"
 postOrderTraversal value: tree value: [ :node |
     | childColors averageColor |
     (node children isEmpty) ifFalse: [
-        "Récupérer les couleurs de tous les enfants qui ont une couleur"
         childColors := node children collect: [ :child | child color ].
         childColors := childColors select: [ :c | c notNil ].
-
         childColors isEmpty ifFalse: [
-            "Calculer la couleur moyenne"
             averageColor := childColors sum / childColors size.
             node color: averageColor translucent.
         ].
     ].
 ].
 
-
 "Afficher l'arbre"
-tree open .
+tree open.
 
 ]
 
@@ -124,6 +119,18 @@ GitCodeCoverage >> codeCoveragInFile: blame [
 GitCodeCoverage >> codeCoverageOf: aGLHProject inBranch: aBranch [ 
 
 	gitImporter importFilesOfBranch: aBranch.
+]
+
+{ #category : 'as yet unclassified' }
+GitCodeCoverage >> fileBlamesDictOfBranch: GLHBranch [ 
+                       |files blames fileBlameDict  |
+
+
+      files := ((GLHBranch allToScope: GLHFile))asOrderedCollection .
+      blames := files collect: [ :file | gitImporter getBlameOf: file path  inBranch: ((GLHBranch  name )asStringOrText) ofProject:GLHBranch repository  project id ].
+     fileBlameDict := Dictionary new.
+    files with: blames do: [ :file :blame | fileBlameDict at: file put: (blame ifNil: ['No Blame Found'])].
+^fileBlameDict .
 ]
 
 { #category : 'accessing' }

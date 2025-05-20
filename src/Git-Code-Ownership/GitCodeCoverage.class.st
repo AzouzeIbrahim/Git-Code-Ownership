@@ -18,6 +18,93 @@ tree := HNode named: 'projet'.
 "Création de l'échelle de couleur"
 s := NSScale linear.
 s domain: { -30 . 0 }.
+s range: { Color white . Color red }.
+
+"Construction de l'arbre avec les fichiers"
+fileBlameDict associationsDo: [ :assoc |
+    | path segments currentNode nextNode lastSegment isFile fileNode nodeName blames colors color |
+
+    path := assoc key.
+    blames := assoc value.
+    segments := path asFileReference pathSegments.
+
+    lastSegment := segments last.
+    isFile := lastSegment includes: $. .  " pour éviter la création des fichier fantome pour des dossier "
+
+    "Calcul des couleurs pour les fichiers"
+   colors := (blames isArray 
+    ifTrue: [ 
+        blames collect: [ :d | 
+            (s scale: ((Date today - (DateAndTime fromString: ((d at: #commit) at: #committed_date))) asDays)) translucent 
+        ] 
+    ] 
+    ifFalse: [ 
+        #()  "Return an empty collection if blames is not an array"
+    ]).
+
+    currentNode := tree.
+
+    "Créer les dossiers intermédiaires"
+    segments allButLast do: [ :segment |
+        nodeName := segment , '/'.
+        nextNode := (currentNode children detect: [ :child | child name = nodeName ] ifNone: [
+            | newNode  |
+             newNode := HNode named: nodeName  .
+                newNode style: HBorderAndTitleStyle new. 
+             currentNode add: newNode.
+            newNode
+        ]).
+        currentNode := nextNode.
+       currentNode collapse .
+    ].
+
+    "Ajouter un fichier seulement si c’est un vrai fichier"
+isFile ifTrue: [
+    fileNode := HNode named: lastSegment.
+    color := (colors ifNotEmpty: [ colors sum translucent ] ifEmpty: [ Color gray translucent ]).
+    fileNode color: color.
+    fileNode rawModel: blames.  "💡 Ajoute les blames au nœud"
+    currentNode add: fileNode.
+].
+
+
+].
+
+"Parcours post-ordre pour colorier les dossiers"
+postOrderTraversal := [ :node :block |
+    node children do: [ :child |
+        postOrderTraversal value: child value: block
+    ].
+    block value: node.
+].
+
+"Coloration des dossiers"
+postOrderTraversal value: tree value: [ :node |
+    | childColors averageColor |
+    (node children isEmpty) ifFalse: [
+        childColors := node children collect: [ :child | child color ].
+        childColors := childColors select: [ :c | c notNil ].
+        childColors isEmpty ifFalse: [
+            averageColor := childColors sum / childColors size.
+            node color: averageColor translucent.
+        ].
+    ].
+].
+
+"Afficher l'arbre"
+tree open.
+
+]
+
+{ #category : 'as yet unclassified' }
+GitCodeCoverage >> codeCoveragInBranch:  fileBlameDict  from:  starDate to: endDate [ 
+	|tree s  postOrderTraversal    |
+"Création de l'arbre"
+tree := HNode named: 'projet'.
+
+"Création de l'échelle de couleur"
+s := NSScale linear.
+s domain: { starDate . endDate  }.
 s range: { Color blue . Color red }.
 
 "Construction de l'arbre avec les fichiers"
@@ -32,9 +119,15 @@ fileBlameDict associationsDo: [ :assoc |
     isFile := lastSegment includes: $. .  " pour éviter la création des fichier fantome pour des dossier "
 
     "Calcul des couleurs pour les fichiers"
-    colors := blames collect: [ :d |
-        (s scale: ((Date today - (DateAndTime fromString: ((d at: #commit) at: #committed_date))) asDays)) translucent
-    ].
+   colors := (blames isArray 
+    ifTrue: [ 
+        blames collect: [ :d | 
+            (s scale: ((Date today - (DateAndTime fromString: ((d at: #commit) at: #committed_date))) asDays)) translucent 
+        ] 
+    ] 
+    ifFalse: [ 
+        #()  "Return an empty collection if blames is not an array"
+    ]).
 
     currentNode := tree.
 
@@ -42,24 +135,26 @@ fileBlameDict associationsDo: [ :assoc |
     segments allButLast do: [ :segment |
         nodeName := segment , '/'.
         nextNode := (currentNode children detect: [ :child | child name = nodeName ] ifNone: [
-            | newNode |
-            newNode := HNode named: nodeName.
-            currentNode add: newNode.
+            | newNode  |
+             newNode := HNode named: nodeName  .
+                newNode style: HBorderAndTitleStyle new. 
+             currentNode add: newNode.
             newNode
         ]).
-        currentNode collapse.
         currentNode := nextNode.
+       currentNode collapse .
     ].
 
     "Ajouter un fichier seulement si c’est un vrai fichier"
-    isFile ifTrue: [
-        fileNode := HNode named: lastSegment.
-        color := (colors ifNotEmpty: [ colors sum translucent ] ifEmpty: [ Color gray translucent ]).
-        fileNode color: color.
-        currentNode add: fileNode.
-    ].
+isFile ifTrue: [
+    fileNode := HNode named: lastSegment.
+    color := (colors ifNotEmpty: [ colors sum translucent ] ifEmpty: [ Color gray translucent ]).
+    fileNode color: color.
+    fileNode rawModel: blames.  "💡 Ajoute les blames au nœud"
+    currentNode add: fileNode.
+].
 
-    currentNode collapse.
+
 ].
 
 "Parcours post-ordre pour colorier les dossiers"
@@ -123,14 +218,20 @@ GitCodeCoverage >> codeCoverageOf: aGLHProject inBranch: aBranch [
 
 { #category : 'as yet unclassified' }
 GitCodeCoverage >> fileBlamesDictOfBranch: GLHBranch [ 
-                       |files blames fileBlameDict  |
-
-
+   |files blames fileBlameDict|  
+      blames  := nil . 
+      fileBlameDict := Dictionary new.
       files := ((GLHBranch allToScope: GLHFile))asOrderedCollection .
       blames := files collect: [ :file | gitImporter getBlameOf: file path  inBranch: ((GLHBranch  name )asStringOrText) ofProject:GLHBranch repository  project id ].
-     fileBlameDict := Dictionary new.
-    files with: blames do: [ :file :blame | fileBlameDict at: file put: (blame ifNil: ['No Blame Found'])].
-^fileBlameDict .
+     files with: blames do: [ :file :blame | 
+    | value |
+    value := (blame isNil or: [blame isEmpty]) 
+        ifTrue: ['No Blame Found'] 
+        ifFalse: [blame].
+    fileBlameDict at: file path put: value.
+].
+^fileBlameDict.
+
 ]
 
 { #category : 'accessing' }

@@ -36,7 +36,7 @@ GitlabModelImporter >> UserContributionFromBlameInFile: blame [
 { #category : '*Git-Code-Ownership' }
 GitlabModelImporter >> UserContributionFromBlames: blamesArray [
     | dictionary_Emails_Lines line blames   |
-     "filter if  the blame isn't nil  bacause some file like media and photo dosn'thave blame  "
+     "filter if  the blame isn't nil  bacause some file like media and photo doesn't have blame  "
     blames := blamesArray reject: [:item | item isNil].
     "Step 1: Initialize dictionary to store email -> total lines count"
     dictionary_Emails_Lines := Dictionary new.
@@ -59,8 +59,8 @@ GitlabModelImporter >> UserContributionFromBlames: blamesArray [
 
                 "Update dictionary (add lines if email exists, otherwise initialize)"
                 (dictionary_Emails_Lines includesKey: authorEmail)
-                    ifTrue: [ dictionary_Emails_Lines at: authorEmail put: ((dictionary_Emails_Lines at: authorEmail) + ((linesSize)/line)asFloat) ]
-                    ifFalse: [ dictionary_Emails_Lines at: authorEmail put:((linesSize)/line)asFloat ].
+                    ifTrue: [ dictionary_Emails_Lines at: authorEmail put: ((dictionary_Emails_Lines at: authorEmail) + ((linesSize)/line)asFloat ) ]
+                    ifFalse: [ dictionary_Emails_Lines at: authorEmail put:((linesSize/line)asFloat) ].
             ].
         ].
     ].

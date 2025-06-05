@@ -10,6 +10,46 @@ Class {
 }
 
 { #category : 'as yet unclassified' }
+GitCodeCoverage >> ProjectTree: fileBlameDict [ 
+    | root |
+    root := HNode named: 'projet'.
+    
+    fileBlameDict associationsDo: [ :assoc |
+        | path segments currentNode lastSegment isFile blames fileNode nodeName |
+        
+        path := assoc key.
+        blames := assoc value.
+        segments := path asFileReference pathSegments.
+        lastSegment := segments last.
+        isFile := lastSegment includes: $. .
+        
+        currentNode := root.
+        segments allButLast do: [ :segment |
+            nodeName := segment , '/'.
+            currentNode := currentNode children
+                detect: [ :child | child name = nodeName ]
+                ifNone: [
+                    | newNode |
+                    newNode := HNode named: nodeName.
+                    newNode style: HBorderAndTitleStyle new.
+                    currentNode add: newNode.
+                    newNode
+                ].
+            currentNode collapse.
+        ].
+        
+        isFile ifTrue: [
+            fileNode := HNode named: lastSegment.
+            fileNode rawModel: blames. 
+            currentNode add: fileNode.
+        ].
+    ].
+    
+    ^ root
+
+]
+
+{ #category : 'as yet unclassified' }
 GitCodeCoverage >> codeCoveragInBranch:  fileBlameDict [ 
 	|tree s  postOrderTraversal calculateDaysAgo |
      tree  := self ProjectTree: fileBlameDict .

@@ -1,3 +1,16 @@
+"
+run metacello with:
+""
+Metacello new
+repository: 'github//github.com:Evref-BL/Git-Code-Ownership:main/src';
+baseline: 'GitCodeOwnership';
+onConflict: [ :ex | ex useLoaded ];
+onUpgrade: [ :ex | ex useLoaded ];
+onDowngrade: [ :ex | ex useLoaded ];
+ignoreImage;
+load
+""
+"
 Class {
 	#name : 'BaselineOfGitCodeOwnership',
 	#superclass : 'BaselineOf',

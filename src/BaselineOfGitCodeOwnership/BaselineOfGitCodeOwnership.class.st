@@ -33,7 +33,7 @@ BaselineOfGitCodeOwnership >> defineDependencies: spec [
 	"donne les ref vers le projet qui se trouve sur un depot distance (je crois)"
 
 	spec baseline: 'GitLabHealth' with: [
-		spec loads: #('Jira');
+		spec loads: #('default');
 		repository:
 			'github://moosetechnology/GitProjectHealth:main/src' ]
 

@@ -35,7 +35,7 @@ BaselineOfGitCodeOwnership >> defineDependencies: spec [
 	spec baseline: 'GitLabHealth' with: [
 		spec loads: #('default');
 		repository:
-			'github://moosetechnology/GitProjectHealth:main/src' ]
+			'github://moosetechnology/GitProjectHealth:develop/src' ]
 
 ]
 

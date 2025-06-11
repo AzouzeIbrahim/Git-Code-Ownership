@@ -36,7 +36,7 @@ BaselineOfGitCodeOwnership >> defineDependencies: spec [
 	spec baseline: 'GitLabHealth' with: [
 		spec loads: #('Jira');
 		repository:
-			'github://moosetechnology/GitProjectHealth:develop/src' ]
+			'github://moosetechnology/GitProjectHealth:main/src' ]
 
 ]
 

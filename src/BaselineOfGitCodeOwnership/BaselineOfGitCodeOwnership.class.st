@@ -2,12 +2,11 @@
 run metacello with:
 ""
 Metacello new
-repository: 'github//github.com:Evref-BL/Git-Code-Ownership:main/src';
+repository: 'github://Evref-BL/Git-Code-Ownership:main/src';
 baseline: 'GitCodeOwnership';
 onConflict: [ :ex | ex useLoaded ];
-onUpgrade: [ :ex | ex useLoaded ];
+onUpgrade: [ :ex | ex useIncoming ];
 onDowngrade: [ :ex | ex useLoaded ];
-ignoreImage;
 load
 ""
 "

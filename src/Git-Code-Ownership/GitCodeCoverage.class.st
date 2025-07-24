@@ -2,32 +2,211 @@ Class {
 	#name : 'GitCodeCoverage',
 	#superclass : 'Object',
 	#instVars : [
-		'gitImporter'
+		'gitImporter',
+		'project',
+		'branch',
+		'glApi',
+		'glhImporter',
+		'fileBlameDict',
+		'developerEmail',
+		'maxDays',
+		'color'
 	],
 	#category : 'Git-Code-Ownership-Objects',
 	#package : 'Git-Code-Ownership',
 	#tag : 'Objects'
 }
 
-{ #category : 'as yet unclassified' }
-GitCodeCoverage >> ProjectTree: fileBlameDict [ 
-    | root |
+{ #category : 'coverage' }
+GitCodeCoverage >> HeatMapForContributorEmail: authorEmail usingColor: baseColor [ 
+    | tree blames devDict getDevPercent postOrderTraversal |
+    tree := self  ProjectTree.
+    blames := tree allChildren collect: [:node | node rawModel] thenSelect: [:each | each isArray and: [each notEmpty]].
+    devDict := glhImporter  UserContributionFromBlames: blames.
+
+    getDevPercent := [:blames :email |
+        | total matching |
+        total := blames size.
+        matching := blames count: [:b | ((b at: 'commit') at: 'author_email') = email].
+        total = 0 ifTrue: [0] ifFalse: [matching / total asFloat].
+    ].
+
+    tree allChildren do: [:fileNode |
+        | percent color |
+        (fileNode rawModel isArray and: [fileNode rawModel notEmpty]) ifTrue: [
+            percent := getDevPercent value: fileNode rawModel value: authorEmail.
+            color := percent > 0 ifTrue: [baseColor alpha: percent] ifFalse: [Color gray].
+            fileNode color: color.
+        ].
+    ].
+
+    postOrderTraversal := [:node :block |
+        node children do: [:child | postOrderTraversal value: child value: block].
+        block value: node.
+    ].
+
+    postOrderTraversal value: tree value: [:node |
+        | descendantFiles percents avgPercent color |
+        descendantFiles := node allChildren select: [:child |
+            child rawModel isArray and: [child rawModel notEmpty]
+        ].
+        descendantFiles isEmpty ifFalse: [
+            percents := descendantFiles collect: [:child |
+                getDevPercent value: child rawModel value: authorEmail
+            ].
+            avgPercent := percents sum / percents size asFloat.
+            color := avgPercent > 0 ifTrue: [baseColor alpha: avgPercent] ifFalse: [Color gray].
+            node color: color.
+        ].
+    ].
+    ^ tree
+
+]
+
+{ #category : 'coverage' }
+GitCodeCoverage >> HeatMapForRecentChangesUpToDays: daysAgo [
+    | tree scale postOrderTraversal calculateDaysAgo |
+    tree := self ProjectTree.
+    scale := NSScale linear.
+    scale domain: { 0 . daysAgo }.
+    scale range: { Color red . Color blue }.
+    scale clamp: true.
+
+    calculateDaysAgo := [:blames |
+        | latestDate |
+        latestDate := (blames collect: [:d | DateAndTime fromString: ((d at: #commit) at: #committed_date)]) max.
+        (Date today - latestDate) asDays
+    ].
+
+    tree children do: [:child |
+        (child rawModel isArray and: [child rawModel notEmpty]) ifTrue: [
+            | days color |
+            days := calculateDaysAgo value: child rawModel.
+            color := (scale scale: days) translucent.
+            child color: color.
+        ].
+    ].
+
+    postOrderTraversal := [:node :block |
+        node children do: [:child | postOrderTraversal value: child value: block].
+        block value: node.
+    ].
+
+    postOrderTraversal value: tree value: [:node |
+        | descendantFiles daysList avgDays color |
+        descendantFiles := node allChildren select: [:child |
+            child rawModel isArray and: [child rawModel notEmpty]
+        ].
+        descendantFiles isEmpty ifFalse: [
+            daysList := descendantFiles collect: [:child |
+                calculateDaysAgo value: child rawModel
+            ].
+            avgDays := daysList sum / daysList size.
+            color := (scale scale: avgDays) translucent.
+            node color: color.
+        ].
+    ].
+    ^ tree
+]
+
+{ #category : 'coverage' }
+GitCodeCoverage >> HeatMapForTop3Contributors [
+  | tree blames devDict topAuthors topAuthorEmails developerColors postOrderTraversal mainContributor |
+
+    tree := self ProjectTree .
+
+    blames := tree allChildren
+        collect: [:node | node rawModel]
+        thenSelect: [:each | each isArray and: [each notEmpty]].
+
+    devDict := glhImporter UserContributionFromBlames: blames.
+
+    topAuthors := (devDict associations
+        sort: [:a :b | b value < a value])
+        first: (3 min: devDict size).
+
+    topAuthorEmails := topAuthors collect: [:assoc | assoc key].
+
+    developerColors := Dictionary new.
+    topAuthorEmails withIndexDo: [:author :index |
+        developerColors at: author put: ({ Color red. Color green. Color blue } at: index ifAbsent: [Color gray ])].
+    developerColors at: 'Others' put: Color gray.
+
+    mainContributor := [:blamesList |
+        | authorCounts maxAuthor |
+        authorCounts := Dictionary new.
+        blamesList do: [:line |
+            | author |
+            author := ((line at: #commit) at: #author_email).
+            authorCounts at: author ifAbsentPut: [0].
+            authorCounts at: author put: (authorCounts at: author) + 1.
+        ].
+        maxAuthor := authorCounts associations
+            inject: nil into: [:max :each |
+                (max isNil or: [each value > max value])
+                    ifTrue: [each] ifFalse: [max]].
+        maxAuthor key
+    ].
+
+    tree allChildren do: [:fileNode |
+        | contributor key color |
+        (fileNode rawModel isArray and: [fileNode rawModel notEmpty]) ifTrue: [
+            contributor := mainContributor value: fileNode rawModel.
+            key := (topAuthorEmails includes: contributor)
+                ifTrue: [contributor]
+                ifFalse: ['Others'].
+            color := (developerColors at: key ifAbsent: [Color gray]) translucent.
+            fileNode color: color.
+        ].
+    ].
+
+    postOrderTraversal := [:node :block |
+        node children do: [:child | postOrderTraversal value: child value: block].
+        block value: node.
+    ].
+
+    postOrderTraversal value: tree value: [:node |
+        | descendantFiles authorCounts maxAuthor contributor key color |
+        descendantFiles := node allChildren select: [:child |
+            child rawModel isArray and: [child rawModel notEmpty]].
+        descendantFiles isEmpty ifFalse: [
+            authorCounts := Dictionary new.
+            descendantFiles do: [:child |
+                contributor := mainContributor value: child rawModel.
+                key := (topAuthorEmails includes: contributor)
+                    ifTrue: [contributor]
+                    ifFalse: ['Others'].
+                authorCounts at: key ifAbsentPut: [0].
+                authorCounts at: key put: (authorCounts at: key) + 1.
+            ].
+            maxAuthor := authorCounts associations
+                inject: nil into: [:max :each |
+                    (max isNil or: [each value > max value])
+                        ifTrue: [each] ifFalse: [max]].
+            color := (developerColors at: maxAuthor key ifAbsent: [Color gray]) translucent.
+            node color: color.
+        ].
+    ].
+
+    ^ tree
+]
+
+{ #category : 'initialization - data' }
+GitCodeCoverage >> ProjectTree [ 
+  | root |
     root := HNode named: 'projet'.
-    
-    fileBlameDict associationsDo: [ :assoc |
+    fileBlameDict associationsDo: [:assoc |
         | path segments currentNode lastSegment isFile blames fileNode nodeName |
-        
         path := assoc key.
         blames := assoc value.
         segments := path asFileReference pathSegments.
         lastSegment := segments last.
         isFile := lastSegment includes: $. .
-        
         currentNode := root.
-        segments allButLast do: [ :segment |
+        segments allButLast do: [:segment |
             nodeName := segment , '/'.
             currentNode := currentNode children
-                detect: [ :child | child name = nodeName ]
+                detect: [:child | child name = nodeName ]
                 ifNone: [
                     | newNode |
                     newNode := HNode named: nodeName.
@@ -37,309 +216,88 @@ GitCodeCoverage >> ProjectTree: fileBlameDict [
                 ].
             currentNode collapse.
         ].
-        
         isFile ifTrue: [
             fileNode := HNode named: lastSegment.
-            fileNode rawModel: blames. 
+            fileNode rawModel: blames.
             currentNode add: fileNode.
         ].
     ].
-    
     ^ root
 
 ]
 
-{ #category : 'as yet unclassified' }
-GitCodeCoverage >> codeCoveragFor: AuthorEmail from: fileBlameDict by: color [
-    | blames projectTree  developerContributionDict developerColor getDevPercent postOrderTraversal |
+{ #category : 'accessing' }
+GitCodeCoverage >> branch [
+	^ branch
+]
 
+{ #category : 'accessing' }
+GitCodeCoverage >> branch: aBranchName [
+	branch := aBranchName.
+	^ self
+]
 
-      projectTree := self ProjectTree: fileBlameDict .
-      blames := projectTree allChildren collect: [:fileNode | fileNode rawModel] thenSelect: [:each | each isArray and: [each notEmpty]].
-      developerContributionDict := gitImporter UserContributionFromBlames: blames .
-      developerColor := color . 
+{ #category : 'accessing' }
+GitCodeCoverage >> fileBlameDict [
+	^ fileBlameDict
+]
 
-     getDevPercent := [ :blames :authorEmail |
-        | total matching |
-        total := blames size.
-        matching := blames count: [ :b |
-            ((b at: 'commit') at: 'author_email') = authorEmail
-        ].
-        total = 0 ifTrue: [ 0 ] ifFalse: [ matching / total asFloat ].
+{ #category : 'accessing' }
+GitCodeCoverage >> fileBlameDict: afileBlameDict [
+	fileBlameDict := afileBlameDict.
+	^ self
+]
+
+{ #category : 'initialization - data' }
+GitCodeCoverage >> fileBlamesDictOfBranch [   
+    | files blames  |
+ files := nil .
+    files := (branch allToScope: GLHFile) asOrderedCollection.
+    blames := files collect: [:file |
+        gitImporter getBlameOf: file path inBranch: branch name asStringOrText ofProject: branch repository project id
     ].
-
-    projectTree allChildren do: [ :fileNode |
-        | blames percent color |
-        blames := fileNode rawModel.
-        (blames isArray and: [ blames notEmpty ]) ifTrue: [
-            percent := getDevPercent value: blames value: AuthorEmail.
-            percent > 0 ifTrue: [
-                color := developerColor alpha: percent.
-                fileNode color: color.
-            ] ifFalse: [
-                fileNode color: Color gray.
-            ].
-        ].
+    fileBlameDict := Dictionary new.
+    files with: blames do: [:file :blame |
+        fileBlameDict at: file path put: ((blame isNil or: [blame isEmpty]) ifTrue: ['No Blame Found'] ifFalse: [blame])
     ].
-    postOrderTraversal := [ :node :block |
-        node children do: [ :child |
-            postOrderTraversal value: child value: block
-        ].
-        block value: node.
-    ].
-
-    postOrderTraversal value: projectTree value: [ :node |
-        | descendantFiles percents avgPercent color |
-        descendantFiles := node allChildren select: [ :child |
-            child rawModel isArray and: [ child rawModel notEmpty ]
-        ].
-        descendantFiles isEmpty ifFalse: [
-            percents := descendantFiles collect: [ :child |
-                getDevPercent value: child rawModel value: AuthorEmail
-            ].
-            avgPercent := percents sum / percents size asFloat.
-            avgPercent > 0 ifTrue: [
-                color := developerColor alpha: avgPercent.
-                node color: color.
-            ] ifFalse: [
-                node color: Color gray.
-            ].
-        ].
-    ].
-     ^ projectTree .
+    ^ fileBlameDict
 
 ]
 
-{ #category : 'as yet unclassified' }
-GitCodeCoverage >> codeCoveragForTop3Contributeurs:   fileBlameDict [  
-    | projectTree developerContributionDict topAuthors topAuthorNames developerColors postOrderTraversal blames mainContributor |
-
-    projectTree := self ProjectTree: fileBlameDict.
-    blames := projectTree allChildren collect: [:fileNode | fileNode rawModel] thenSelect: [:each | each isArray and: [each notEmpty]].
-    developerContributionDict := gitImporter UserContributionFromBlames: blames.
-
-    "  Function to find the main contributor in a file"
-    mainContributor := [ :blamesList |
-        | authorCounts maxAuthor |
-        authorCounts := Dictionary new.
-        blamesList do: [ :line |
-            | author |
-            author := ((line at: #commit) at: #author_email).
-            authorCounts at: author ifAbsentPut: [ 0 ].
-            authorCounts at: author put: (authorCounts at: author) + 1.
-        ].
-        maxAuthor := authorCounts associations
-            inject: nil into: [ :max :each |
-                (max isNil or: [ each value > max value ])
-                    ifTrue: [ each ] ifFalse: [ max ]
-            ].
-        maxAuthor key
-    ].
-
-    " top 3"
-    topAuthors := (developerContributionDict associations
-        sort: [ :a :b | b value < a value ])
-        first: (3 min: developerContributionDict size).
-    topAuthorNames := topAuthors collect: [ :assoc | assoc key ].
-
-    " Assign colors "
-    developerColors := Dictionary new.
-    topAuthorNames withIndexDo: [ :author :index |
-        developerColors at: author put: ({ Color red. Color green. Color blue } at: index ifAbsent: [ Color gray ]) ].
-    developerColors at: 'Autres' put: Color gray.
-
-    " Color files"
-    projectTree allChildren do: [ :fileNode |
-        | contributor key color |
-        (fileNode rawModel isArray and: [ fileNode rawModel notEmpty ]) ifTrue: [
-            contributor := mainContributor value: fileNode rawModel.
-            key := (topAuthorNames includes: contributor)
-                ifTrue: [ contributor ]
-                ifFalse: [ 'Autres' ].
-            color := (developerColors at: key ifAbsent: [ Color gray ]) translucent.
-            fileNode color: color.
-        ].
-    ].
-
-    postOrderTraversal := [ :node :block |
-        node children do: [ :child |
-            postOrderTraversal value: child value: block
-        ].
-        block value: node.
-    ].
-
-    postOrderTraversal value: projectTree value: [ :node |
-        | descendantFiles authorCounts maxAuthor contributor key color |
-        descendantFiles := node allChildren select: [ :child |
-            child rawModel isArray and: [ child rawModel notEmpty ]
-        ].
-        descendantFiles isEmpty ifFalse: [
-            authorCounts := Dictionary new.
-            descendantFiles do: [ :child |
-                contributor := mainContributor value: child rawModel.
-                key := (topAuthorNames includes: contributor)
-                    ifTrue: [ contributor ]
-                    ifFalse: [ 'Autres' ].
-                authorCounts at: key ifAbsentPut: [ 0 ].
-                authorCounts at: key put: (authorCounts at: key) + 1.
-            ].
-            maxAuthor := authorCounts associations
-                inject: nil into: [ :max :each |
-                    (max isNil or: [ each value > max value ])
-                        ifTrue: [ each ]
-                        ifFalse: [ max ]
-                ].
-            color := (developerColors at: maxAuthor key ifAbsent: [ Color gray ]) translucent.
-            node color: color.
-        ].
-    ].
-    ^ { projectTree. developerColors }
-
-
+{ #category : 'accessing' }
+GitCodeCoverage >> glApi [
+	^ glApi
 ]
 
-{ #category : 'as yet unclassified' }
-GitCodeCoverage >> codeCoveragInBranch:  fileBlameDict [ 
-	|tree s  postOrderTraversal calculateDaysAgo |
-     tree  := self ProjectTree: fileBlameDict .
-
-      s := NSScale linear.
-      s domain: { 0 . 30 }.
-      s range: { Color red . Color blue }.
-      s clamp: true.
-
-calculateDaysAgo := [ :blames |
-     | latestDate |
-   latestDate := (blames collect: [ :d | DateAndTime fromString: ((d at: #commit) at: #committed_date) ]) max.
-   (Date today - latestDate) asDays ].
-tree children do: [:child |
-        (child rawModel isArray and: [ child rawModel notEmpty ]) ifTrue: [
-            | days color |
-            days := calculateDaysAgo value: child rawModel.
-            color := (s scale: days) translucent.
-            child color: color.
-        ].
-    ].
-postOrderTraversal := [ :node :block |
-    node children do: [ :child | postOrderTraversal value: child value: block
-    ].
-    block value: node.
-].
-
-postOrderTraversal value: tree value: [ :node |
-    | descendantFiles daysList avgDays color |
-
-    descendantFiles := node allChildren select: [ :child |
-        (child rawModel isArray and: [ child rawModel notEmpty ])
-    ].
-
-    descendantFiles isEmpty ifFalse: [
-        daysList := descendantFiles collect: [ :child |
-            calculateDaysAgo value: child rawModel
-        ].
-        avgDays := daysList sum / daysList size.
-        color := (s scale: avgDays) translucent.
-        node color: color.
-    ].
-].
-
-^tree.
-
+{ #category : 'accessing' }
+GitCodeCoverage >> glApi: anApi [
+	glApi := anApi.
+	^ self
 ]
 
-{ #category : 'as yet unclassified' }
-GitCodeCoverage >> codeCoveragInBranch:  fileBlameDict  from:   DaysAgo [ 
-	|tree s  postOrderTraversal  calculateDaysAgo   |
-
-     tree  := self ProjectTree: fileBlameDict .
-		s := NSScale linear.
-		s domain: { 0 . DaysAgo  }.
-		s range: { Color red . Color blue }.
-		s clamp: true. 
-
-calculateDaysAgo := [ :blames |
-    | latestDate |
-    latestDate := (blames collect: [ :d | DateAndTime fromString: ((d at: #commit) at: #committed_date)]) max.
-    (Date today - latestDate) asDays
-].
-tree children do: [:child |
-        (child rawModel isArray and: [ child rawModel notEmpty ]) ifTrue: [
-            | days color |
-            days := calculateDaysAgo value: child rawModel.
-            color := (s scale: days) translucent.
-            child color: color.
-        ].
-    ].
-
-postOrderTraversal := [ :node :block |
-    node children do: [ :child |postOrderTraversal value: child value: block].
-    block value: node.
-].
-
-postOrderTraversal value: tree value: [ :node |
-    | descendantFiles daysList avgDays color |
-
-    descendantFiles := node allChildren select: [ :child |
-        (child rawModel isArray and: [ child rawModel notEmpty ])
-    ].
-
-    descendantFiles isEmpty ifFalse: [
-        daysList := descendantFiles collect: [ :child |
-            calculateDaysAgo value: child rawModel
-        ].
-        avgDays := daysList sum / daysList size.
-        color := (s scale: avgDays) translucent.
-        node color: color.
-    ].
-].
-
-^ tree .
-
+{ #category : 'accessing' }
+GitCodeCoverage >> glhImporter [
+	^ glhImporter
 ]
 
-{ #category : 'coverage' }
-GitCodeCoverage >> codeCoveragInFile: blame [   
-    | daysList h  |
-
-    blame ifNil: [ ^self inform: 'No blames found ' ].
-    (blame isArray and: [ blame isEmpty ])
-        ifTrue: [ ^self inform: 'no commit found ' ].
-
-    " calculate the periode in days "
-    daysList := blame collect: [ :d |
-        ((Date today - (DateAndTime fromString: ((d at: #commit) at: #committed_date))) asDays)
-    ].
-
-    " heatmap"
-    h := RSHeatmap new.
-    h objectsX: (1 to: daysList size) asArray.
-    h objectsY: #('Commits').
-    h dataMatrix: (Array with: daysList asArray).
-    h shouldShowCellLabels: false.
-    h open.
-
-]
-
-{ #category : 'as yet unclassified' }
-GitCodeCoverage >> fileBlamesDictOfBranch: branch [  
-   |files blames fileBlameDict|  
-       blames  := nil . 
-       files := nil .
-      fileBlameDict := Dictionary new.
-      files := ((branch allToScope: GLHFile))asOrderedCollection .
-      blames := files collect: [ :file | gitImporter getBlameOf: file path  inBranch: ((branch  name )asStringOrText) ofProject: branch repository  project id ].
-     files with: blames do: [ :file :blame | 
-    | value |
-    value := (blame isNil or: [blame isEmpty]) 
-        ifTrue: ['No Blame Found'] 
-        ifFalse: [blame].
-    fileBlameDict at: file path put: value.
-].
-^fileBlameDict.
-
+{ #category : 'accessing' }
+GitCodeCoverage >> glhImporter: anImporter [
+	glhImporter := anImporter.
+	^ self
 ]
 
 { #category : 'accessing' }
 GitCodeCoverage >> importer: aGitImporter [ 
 	gitImporter := aGitImporter 
+]
+
+{ #category : 'accessing' }
+GitCodeCoverage >> project [
+	^ project
+]
+
+{ #category : 'accessing' }
+GitCodeCoverage >> project: aProject [
+	project := aProject.
+	^ self
 ]

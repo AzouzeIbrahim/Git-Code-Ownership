@@ -7,10 +7,7 @@ Class {
 		'branch',
 		'glApi',
 		'glhImporter',
-		'fileBlameDict',
-		'developerEmail',
-		'maxDays',
-		'color'
+		'fileBlameDict'
 	],
 	#category : 'Git-Code-Ownership-Objects',
 	#package : 'Git-Code-Ownership',
@@ -22,8 +19,8 @@ GitCodeCoverage >> HeatMapForContributorEmail: authorEmail usingColor: baseColor
     | tree blames devDict getDevPercent postOrderTraversal |
     tree := self  ProjectTree.
     blames := tree allChildren collect: [:node | node rawModel] thenSelect: [:each | each isArray and: [each notEmpty]].
-    devDict := glhImporter  UserContributionFromBlames: blames.
 
+     "Define a  function to calculate the contribution percentage of the given author in a blame list"
     getDevPercent := [:blames :email |
         | total matching |
         total := blames size.
@@ -31,6 +28,7 @@ GitCodeCoverage >> HeatMapForContributorEmail: authorEmail usingColor: baseColor
         total = 0 ifTrue: [0] ifFalse: [matching / total asFloat].
     ].
 
+    " Color each file node based on the author's contribution"
     tree allChildren do: [:fileNode |
         | percent color |
         (fileNode rawModel isArray and: [fileNode rawModel notEmpty]) ifTrue: [
@@ -45,6 +43,7 @@ GitCodeCoverage >> HeatMapForContributorEmail: authorEmail usingColor: baseColor
         block value: node.
     ].
 
+   " For each directory , compute the average contribution over its descendant files"
     postOrderTraversal value: tree value: [:node |
         | descendantFiles percents avgPercent color |
         descendantFiles := node allChildren select: [:child |
@@ -67,6 +66,7 @@ GitCodeCoverage >> HeatMapForContributorEmail: authorEmail usingColor: baseColor
 GitCodeCoverage >> HeatMapForRecentChangesUpToDays: daysAgo [
     | tree scale postOrderTraversal calculateDaysAgo |
     tree := self ProjectTree.
+    " Create a linear color scale from 0 to daysAgo, mapping to red (recent) to blue (old)"
     scale := NSScale linear.
     scale domain: { 0 . daysAgo }.
     scale range: { Color red . Color blue }.
@@ -77,7 +77,7 @@ GitCodeCoverage >> HeatMapForRecentChangesUpToDays: daysAgo [
         latestDate := (blames collect: [:d | DateAndTime fromString: ((d at: #commit) at: #committed_date)]) max.
         (Date today - latestDate) asDays
     ].
-
+     " Color each file node (leaf) based on how recent the latest change was"
     tree children do: [:child |
         (child rawModel isArray and: [child rawModel notEmpty]) ifTrue: [
             | days color |
@@ -86,12 +86,11 @@ GitCodeCoverage >> HeatMapForRecentChangesUpToDays: daysAgo [
             child color: color.
         ].
     ].
-
+    " Define post-order traversal to color folder nodes based on average recency of their children"
     postOrderTraversal := [:node :block |
         node children do: [:child | postOrderTraversal value: child value: block].
         block value: node.
     ].
-
     postOrderTraversal value: tree value: [:node |
         | descendantFiles daysList avgDays color |
         descendantFiles := node allChildren select: [:child |
@@ -112,21 +111,19 @@ GitCodeCoverage >> HeatMapForRecentChangesUpToDays: daysAgo [
 { #category : 'coverage' }
 GitCodeCoverage >> HeatMapForTop3Contributors [
   | tree blames devDict topAuthors topAuthorEmails developerColors postOrderTraversal mainContributor |
-
-    tree := self ProjectTree .
-
-    blames := tree allChildren
+     blames := tree allChildren
         collect: [:node | node rawModel]
         thenSelect: [:each | each isArray and: [each notEmpty]].
 
+    "getting  a dictionary of  contributor (email → number of contributions)"
     devDict := glhImporter UserContributionFromBlames: blames.
-
+    " Extract the top 3 contributors sorted by number of contributions "
     topAuthors := (devDict associations
         sort: [:a :b | b value < a value])
         first: (3 min: devDict size).
-
     topAuthorEmails := topAuthors collect: [:assoc | assoc key].
 
+    "Assign a distinct color for each top contributor (up to 3), others get gray"
     developerColors := Dictionary new.
     topAuthorEmails withIndexDo: [:author :index |
         developerColors at: author put: ({ Color red. Color green. Color blue } at: index ifAbsent: [Color gray ])].
@@ -148,6 +145,7 @@ GitCodeCoverage >> HeatMapForTop3Contributors [
         maxAuthor key
     ].
 
+    " Apply color to each file node based on its main contributor"
     tree allChildren do: [:fileNode |
         | contributor key color |
         (fileNode rawModel isArray and: [fileNode rawModel notEmpty]) ifTrue: [
@@ -160,11 +158,13 @@ GitCodeCoverage >> HeatMapForTop3Contributors [
         ].
     ].
 
+    "Define post-order traversal for 'non-leaf' nodes to aggregate colors"
     postOrderTraversal := [:node :block |
         node children do: [:child | postOrderTraversal value: child value: block].
         block value: node.
     ].
 
+    "Color folder nodes based on their dominant contributor from their descendant files"
     postOrderTraversal value: tree value: [:node |
         | descendantFiles authorCounts maxAuthor contributor key color |
         descendantFiles := node allChildren select: [:child |
@@ -193,6 +193,7 @@ GitCodeCoverage >> HeatMapForTop3Contributors [
 
 { #category : 'initialization - data' }
 GitCodeCoverage >> ProjectTree [ 
+ "This function creates the tree of a project based on the file paths, where each file or directory is a node, and each file is associated with its blames."
   | root |
     root := HNode named: 'projet'.
     fileBlameDict associationsDo: [:assoc |
@@ -203,6 +204,7 @@ GitCodeCoverage >> ProjectTree [
         lastSegment := segments last.
         isFile := lastSegment includes: $. .
         currentNode := root.
+        "create the tree"
         segments allButLast do: [:segment |
             nodeName := segment , '/'.
             currentNode := currentNode children
@@ -216,6 +218,7 @@ GitCodeCoverage >> ProjectTree [
                 ].
             currentNode collapse.
         ].
+        "associate files  with its blames"
         isFile ifTrue: [
             fileNode := HNode named: lastSegment.
             fileNode rawModel: blames.
@@ -249,13 +252,19 @@ GitCodeCoverage >> fileBlameDict: afileBlameDict [
 ]
 
 { #category : 'initialization - data' }
-GitCodeCoverage >> fileBlamesDictOfBranch [   
+GitCodeCoverage >> fileBlamesDictOfBranch [  
+
+     "This function creates a dictionary where the key is the file path and the value is the blames of the file." 
     | files blames  |
- files := nil .
+    files := nil .
+
+    "Getting all the blames and the files and of a project from a specific branch"
     files := (branch allToScope: GLHFile) asOrderedCollection.
     blames := files collect: [:file |
         gitImporter getBlameOf: file path inBranch: branch name asStringOrText ofProject: branch repository project id
     ].
+
+    "Associate each file with its blames if they exist"
     fileBlameDict := Dictionary new.
     files with: blames do: [:file :blame |
         fileBlameDict at: file path put: ((blame isNil or: [blame isEmpty]) ifTrue: ['No Blame Found'] ifFalse: [blame])

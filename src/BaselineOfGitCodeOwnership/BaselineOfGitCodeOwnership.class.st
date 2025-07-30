@@ -2,12 +2,11 @@
 run metacello with:
 ""
 Metacello new
-repository: 'github//github.com:Evref-BL/Git-Code-Ownership:main/src';
+repository: 'github://Evref-BL/Git-Code-Ownership:main/src';
 baseline: 'GitCodeOwnership';
 onConflict: [ :ex | ex useLoaded ];
-onUpgrade: [ :ex | ex useLoaded ];
+onUpgrade: [ :ex | ex useIncoming ];
 onDowngrade: [ :ex | ex useLoaded ];
-ignoreImage;
 load
 ""
 "
@@ -34,9 +33,9 @@ BaselineOfGitCodeOwnership >> defineDependencies: spec [
 	"donne les ref vers le projet qui se trouve sur un depot distance (je crois)"
 
 	spec baseline: 'GitLabHealth' with: [
-		spec loads: #('Jira');
+		spec loads: #('default');
 		repository:
-			'github://moosetechnology/GitProjectHealth:main/src' ]
+			'github://moosetechnology/GitProjectHealth:develop/src' ]
 
 ]
 
